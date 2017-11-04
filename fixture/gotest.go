@@ -1,23 +1,27 @@
 package fixture
 
 import (
-	"sync"
 	"os"
+	"sync"
 	"testing"
 )
 
-var packageFixtures = make([]*Yield, 0)
-var packageWg = &sync.WaitGroup{}
+type Y = *Yield
 
-func PackageFixture(fixture func(*Yield)) interface{} {
-	y := &Yield{channel: make(chan interface{}), wg: packageWg}
-	go func() {
-		defer y.Done()
-		fixture(y)
-	}()
-	packageFixtures = append(packageFixtures, y)
-	result, _ := <-y.channel
-	return result
+var fixtures = make([]*Yield, 0)
+var fixtureWg = &sync.WaitGroup{}
+
+func Fixture(fixture func(*Yield)) func() interface{} {
+	return func() interface{} {
+		y := &Yield{channel: make(chan interface{}), wg: fixtureWg}
+		go func() {
+			defer y.Done()
+			fixture(y)
+		}()
+		fixtures = append(fixtures, y)
+		result, _ := <-y.channel
+		return result
+	}
 }
 
 func UnitFixture(fixture func(*Yield)) func() (value interface{}, cleanup func()) {
@@ -36,30 +40,36 @@ func UnitFixture(fixture func(*Yield)) func() (value interface{}, cleanup func()
 	}
 }
 
-func FixtureMain(m *testing.M) {
+func GoTestMain(m *testing.M) {
 	code := m.Run()
 	tearDown()
 	os.Exit(code)
 }
 
 func tearDown() {
-	for _, j := range packageFixtures {
+	for _, j := range fixtures {
 		<-j.channel
 	}
-	packageWg.Wait()
+	fixtureWg.Wait()
 }
 
 type Yield struct {
-	channel chan interface{}
-	wg      *sync.WaitGroup
+	channel    chan interface{}
+	wg         *sync.WaitGroup
+	hasYielded bool
 }
 
-func (u *Yield) Fixture(value interface{}) {
-	u.wg.Add(1)
-	u.channel <- value
-	u.channel <- nil
+func (y *Yield) Fixture(value interface{}) {
+	if y.hasYielded {
+		panic("Yield.Fixture can only be called once")
+	}
+	y.hasYielded = true
+	y.wg.Add(1)
+	y.channel <- value
+	y.channel <- nil
 }
 
-func (u *Yield) Done() {
-	u.wg.Done()
+func (y *Yield) Done() {
+	close(y.channel)
+	y.wg.Done()
 }

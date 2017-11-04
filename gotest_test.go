@@ -1,21 +1,21 @@
 package main
 
 import (
+	. "github.com/mattolenik/gotest/fixture"
 	"log"
 	"os"
 	"testing"
 	"time"
-	. "github.com/mattolenik/gotest/fixture"
 )
 
 var logger = log.New(os.Stdout, "", 0)
 
-var fix = PackageFixture(func(yield Y) {
+var fix = Fixture(func(yield Y) {
 	logger.Println("setup")
 	yield.Fixture(5)
 	logger.Println("teardown")
-	time.Sleep(time.Second*2)
-})
+	time.Sleep(time.Second * 2)
+})().(int)
 
 func TestSimple(t *testing.T) {
 	baz, bazDone := bazUnit()
@@ -26,10 +26,8 @@ func TestSimple(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	FixtureMain(m)
+	GoTestMain(m)
 }
-
-type Y = *Yield
 
 var bazUnit = UnitFixture(func(yield Y) {
 	logger.Println("baz start")
